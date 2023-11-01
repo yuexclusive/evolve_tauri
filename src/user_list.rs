@@ -42,33 +42,30 @@ pub fn user_list() -> Html {
         let force_update = force_update.clone();
         let refresh = refresh.clone();
         let selected_row = selected_row.clone();
-        use_effect_with_deps(
-            move |_| {
-                spawn_local(async move {
-                    match user_controller_api::search(
-                        &common::get_cli_config().unwrap(),
-                        key_word.borrow().as_str(),
-                        *index.borrow(),
-                        *size.borrow() as i64,
-                    )
-                    .await
-                    {
-                        Ok(res) => {
-                            *data.borrow_mut() = res.data;
-                            *total.borrow_mut() = res.total;
-                            *loading.borrow_mut() = false;
-                            force_update.force_update();
-                        }
-                        Err(err) => {
-                            *message.borrow_mut() = Some(message_list::error(&format!("{}", err)));
-                            *loading.borrow_mut() = false;
-                        }
-                    };
-                });
-                *selected_row.borrow_mut() = None;
-            },
-            refresh,
-        )
+        use_effect_with(refresh, move |_| {
+            spawn_local(async move {
+                match user_controller_api::search(
+                    &common::get_cli_config().unwrap(),
+                    key_word.borrow().as_str(),
+                    *index.borrow(),
+                    *size.borrow() as i64,
+                )
+                .await
+                {
+                    Ok(res) => {
+                        *data.borrow_mut() = res.data;
+                        *total.borrow_mut() = res.total;
+                        *loading.borrow_mut() = false;
+                        force_update.force_update();
+                    }
+                    Err(err) => {
+                        *message.borrow_mut() = Some(message_list::error(&format!("{}", err)));
+                        *loading.borrow_mut() = false;
+                    }
+                };
+            });
+            *selected_row.borrow_mut() = None;
+        })
     }
 
     let user_form_close = {

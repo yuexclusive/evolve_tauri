@@ -96,21 +96,15 @@ pub fn pager(props: &PagerProps) -> Html {
     let page = use_mut_ref(|| Page::default());
     {
         let page = page.clone();
-        use_memo(
-            move |&total| {
-                page.borrow_mut().change_total(total);
-            },
-            props.total,
-        );
+        use_memo(props.total, move |&total| {
+            page.borrow_mut().change_total(total);
+        });
     }
     {
         let page = page.clone();
-        use_memo(
-            move |&index| {
-                page.borrow_mut().to(index);
-            },
-            props.index,
-        );
+        use_memo(props.index, move |&index| {
+            page.borrow_mut().to(index);
+        });
     }
     let onpagechanged = props.onpagechanged.clone();
 

@@ -129,14 +129,11 @@ pub fn message_list(props: &MessageListProps) -> Html {
     {
         let message_list = message_list.clone();
         let value = props.value.clone();
-        use_memo(
-            move |value| {
-                if let Some(v) = value {
-                    message_list.borrow_mut().push_back(v.clone());
-                }
-            },
-            value,
-        );
+        use_memo(value, move |value| {
+            if let Some(v) = value {
+                message_list.borrow_mut().push_back(v.clone());
+            }
+        });
     }
 
     {
@@ -151,145 +148,133 @@ pub fn message_list(props: &MessageListProps) -> Html {
         let message_list = message_list.clone();
         let current_room = current_room.clone();
         // depends on (), only effected once
-        use_effect_with_deps(
-            move |_| {
-                if ws {
-                    let ws = request::open_ws().unwrap();
-                    let (writer, mut reader) = ws.split();
-                    *ws_writer.borrow_mut() = Some(writer);
-                    let w1 = Rc::clone(&ws_writer);
-                    spawn_local(async move {
-                        if let Some(ss) = &mut *w1.borrow_mut() {
-                            ss.send(Message::Text(String::from("i am back online!")))
-                                .await
-                                .unwrap();
-                        }
-                    });
-
-                    let mut sid = session_id_c.borrow_mut();
-                    if sid.is_none() {
-                        let user = &crate::util::common::get_current_user().unwrap();
-                        *sid = Some(user.name.clone().unwrap_or(user.email.clone()));
+        use_effect_with((), move |_| {
+            if ws {
+                let ws = request::open_ws().unwrap();
+                let (writer, mut reader) = ws.split();
+                *ws_writer.borrow_mut() = Some(writer);
+                let w1 = Rc::clone(&ws_writer);
+                spawn_local(async move {
+                    if let Some(ss) = &mut *w1.borrow_mut() {
+                        ss.send(Message::Text(String::from("i am back online!")))
+                            .await
+                            .unwrap();
                     }
-                    spawn_local(async move {
-                        while let Some(msg) = reader.next().await {
-                            match msg {
-                                Ok(msg) => {
-                                    // log::info!("{:?}", msg);
-                                    // 【{room}】{name}: {msg}
-                                    if let Message::Text(content) = msg {
-                                        if content.starts_with(MESSAGE_PRE) {
-                                            let message_content: MessageContent =
+                });
+
+                let mut sid = session_id_c.borrow_mut();
+                if sid.is_none() {
+                    let user = &crate::util::common::get_current_user().unwrap();
+                    *sid = Some(user.name.clone().unwrap_or(user.email.clone()));
+                }
+                spawn_local(async move {
+                    while let Some(msg) = reader.next().await {
+                        match msg {
+                            Ok(msg) => {
+                                // log::info!("{:?}", msg);
+                                // 【{room}】{name}: {msg}
+                                if let Message::Text(content) = msg {
+                                    if content.starts_with(MESSAGE_PRE) {
+                                        let message_content: MessageContent = serde_json::from_str(
+                                            content.trim_start_matches(MESSAGE_PRE),
+                                        )
+                                        .unwrap();
+                                        text_messages
+                                            .borrow_mut()
+                                            .entry(message_content.room.clone())
+                                            .or_insert(Default::default())
+                                            .push_back(message_content.clone());
+
+                                        if *dialog_closed.borrow() {
+                                            message_list.borrow_mut().push_back(message(
+                                                &message_content.room,
+                                                &message_content.from_id,
+                                                &message_content.from_name,
+                                                &message_content.content,
+                                            ));
+                                        }
+                                    } else {
+                                        if content.starts_with(UPDATE_SESSION_PRE) {
+                                            let change: UpdateSession = serde_json::from_str(
+                                                content.trim_start_matches(UPDATE_SESSION_PRE),
+                                            )
+                                            .unwrap();
+
+                                            *current_room.borrow_mut() =
+                                                Some(change.room.to_string());
+                                        } else if content.starts_with(LIST_PRE) {
+                                            let rooms: HashMap<String, HashMap<String, String>> =
                                                 serde_json::from_str(
-                                                    content.trim_start_matches(MESSAGE_PRE),
-                                                )
-                                                .unwrap();
-                                            text_messages
-                                                .borrow_mut()
-                                                .entry(message_content.room.clone())
-                                                .or_insert(Default::default())
-                                                .push_back(message_content.clone());
-
-                                            if *dialog_closed.borrow() {
-                                                message_list.borrow_mut().push_back(message(
-                                                    &message_content.room,
-                                                    &message_content.from_id,
-                                                    &message_content.from_name,
-                                                    &message_content.content,
-                                                ));
-                                            }
-                                        } else {
-                                            if content.starts_with(UPDATE_SESSION_PRE) {
-                                                let change: UpdateSession = serde_json::from_str(
-                                                    content.trim_start_matches(UPDATE_SESSION_PRE),
-                                                )
-                                                .unwrap();
-
-                                                *current_room.borrow_mut() =
-                                                    Some(change.room.to_string());
-                                            } else if content.starts_with(LIST_PRE) {
-                                                let rooms: HashMap<
-                                                    String,
-                                                    HashMap<String, String>,
-                                                > = serde_json::from_str(
                                                     content.trim_start_matches(LIST_PRE),
                                                 )
                                                 .unwrap();
 
-                                                *self_rooms.borrow_mut() = rooms;
-                                            } else if content.starts_with(JOIN_ROOM_PRE) {
-                                                let change: RoomChange = serde_json::from_str(
-                                                    content.trim_start_matches(JOIN_ROOM_PRE),
-                                                )
-                                                .unwrap();
-                                                let mut sr = self_rooms.borrow_mut();
+                                            *self_rooms.borrow_mut() = rooms;
+                                        } else if content.starts_with(JOIN_ROOM_PRE) {
+                                            let change: RoomChange = serde_json::from_str(
+                                                content.trim_start_matches(JOIN_ROOM_PRE),
+                                            )
+                                            .unwrap();
+                                            let mut sr = self_rooms.borrow_mut();
 
-                                                sr.entry(change.room.to_string())
-                                                    .or_default()
-                                                    .insert(
-                                                        change.session_id.to_string(),
-                                                        change.name.to_string(),
-                                                    );
-                                            } else if content.starts_with(QUIT_ROOM_PRE) {
-                                                let change: RoomChange = serde_json::from_str(
-                                                    content.trim_start_matches(QUIT_ROOM_PRE),
-                                                )
-                                                .unwrap();
+                                            sr.entry(change.room.to_string()).or_default().insert(
+                                                change.session_id.to_string(),
+                                                change.name.to_string(),
+                                            );
+                                        } else if content.starts_with(QUIT_ROOM_PRE) {
+                                            let change: RoomChange = serde_json::from_str(
+                                                content.trim_start_matches(QUIT_ROOM_PRE),
+                                            )
+                                            .unwrap();
 
-                                                let mut sr = self_rooms.borrow_mut();
+                                            let mut sr = self_rooms.borrow_mut();
 
-                                                if let Some(current_session_id) =
-                                                    &*session_id.borrow()
-                                                {
-                                                    if current_session_id == change.session_id {
-                                                        sr.remove(change.room);
-                                                    } else {
-                                                        sr.get_mut(change.room).and_then(|x| {
-                                                            x.remove(change.session_id)
-                                                        });
-                                                    }
-                                                }
-                                            } else if content.starts_with(UPDATE_NAME_PRE) {
-                                                let change: UpdateName = serde_json::from_str(
-                                                    content.trim_start_matches(UPDATE_NAME_PRE),
-                                                )
-                                                .unwrap();
-
-                                                for (_, sessions) in &mut *self_rooms.borrow_mut() {
-                                                    sessions
-                                                        .entry(change.session_id.to_string())
-                                                        .and_modify(|x| {
-                                                            *x = change.name.to_string()
-                                                        });
+                                            if let Some(current_session_id) = &*session_id.borrow()
+                                            {
+                                                if current_session_id == change.session_id {
+                                                    sr.remove(change.room);
+                                                } else {
+                                                    sr.get_mut(change.room)
+                                                        .and_then(|x| x.remove(change.session_id));
                                                 }
                                             }
+                                        } else if content.starts_with(UPDATE_NAME_PRE) {
+                                            let change: UpdateName = serde_json::from_str(
+                                                content.trim_start_matches(UPDATE_NAME_PRE),
+                                            )
+                                            .unwrap();
+
+                                            for (_, sessions) in &mut *self_rooms.borrow_mut() {
+                                                sessions
+                                                    .entry(change.session_id.to_string())
+                                                    .and_modify(|x| *x = change.name.to_string());
+                                            }
                                         }
-                                        force_update.force_update();
                                     }
+                                    force_update.force_update();
                                 }
-                                Err(err) => match err {
-                                    gloo_net::websocket::WebSocketError::ConnectionError => {
-                                        log::error!("connection error: {:#?}", err);
-                                        break;
-                                    }
-                                    gloo_net::websocket::WebSocketError::ConnectionClose(e) => {
-                                        log::info!("connection closed, close event: {:#?}", e);
-                                        break;
-                                    }
-                                    gloo_net::websocket::WebSocketError::MessageSendError(e) => {
-                                        log::error!("message send error: {:#?}", e);
-                                    }
-                                    _ => {
-                                        log::error!("read error: {:#?}", err);
-                                    }
-                                },
                             }
+                            Err(err) => match err {
+                                gloo_net::websocket::WebSocketError::ConnectionError => {
+                                    log::error!("connection error: {:#?}", err);
+                                    break;
+                                }
+                                gloo_net::websocket::WebSocketError::ConnectionClose(e) => {
+                                    log::info!("connection closed, close event: {:#?}", e);
+                                    break;
+                                }
+                                gloo_net::websocket::WebSocketError::MessageSendError(e) => {
+                                    log::error!("message send error: {:#?}", e);
+                                }
+                                _ => {
+                                    log::error!("read error: {:#?}", err);
+                                }
+                            },
                         }
-                    });
-                }
-            },
-            (),
-        );
+                    }
+                });
+            }
+        });
     }
 
     let on_close = {
