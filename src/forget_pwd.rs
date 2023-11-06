@@ -1,7 +1,10 @@
 use crate::util::common;
 use gloo::timers::callback::Timeout;
 use serde::Serialize;
-use user_cli::apis::{user_controller_api, Error};
+use user_cli::apis::{
+    user_controller_api::{self, SendEmailCodeError},
+    Error,
+};
 use user_cli::models;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
@@ -65,7 +68,7 @@ pub enum ForgetPwdMsg {
     KeyDownForgetPwd(web_sys::KeyboardEvent),
     HandleSendEmailCodeSuccess(usize),
     HandleSendEmailCodeError(Box<dyn std::error::Error>),
-    HandleSendEmailCodeHint(Box<dyn std::error::Error>),
+    HandleSendEmailCodeHint(String),
 }
 
 impl Component for ForgetPwd {
@@ -208,12 +211,17 @@ impl Component for ForgetPwd {
                                 }
                                 Err(err) => match err {
                                     user_cli::apis::Error::ResponseError(ref f) => {
-                                        if f.status.as_u16() == 452 {
-                                            // hint
-                                            ForgetPwdMsg::HandleSendEmailCodeHint(Box::new(err))
-                                        } else {
-                                            ForgetPwdMsg::HandleSendEmailCodeError(Box::new(err))
+                                        if let Some(SendEmailCodeError::Status400(
+                                            ref msg_response,
+                                        )) = f.entity
+                                        {
+                                            if Some(452000) == msg_response.err_code {
+                                                return ForgetPwdMsg::HandleSendEmailCodeHint(
+                                                    msg_response.msg.clone(),
+                                                );
+                                            }
                                         }
+                                        ForgetPwdMsg::HandleSendEmailCodeError(Box::new(err))
                                     }
                                     _ => ForgetPwdMsg::HandleSendEmailCodeError(Box::new(err)),
                                 },
