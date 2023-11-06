@@ -8,7 +8,7 @@ use serde::Serialize;
 use std::cell::RefCell;
 use std::rc::Rc;
 use user_cli::apis::user_controller_api;
-use user_cli::models::User;
+use user_cli::models::{User, UserDeleteReq};
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
@@ -19,7 +19,7 @@ pub struct DeleteReq {
 
 #[function_component(UserList)]
 pub fn user_list() -> Html {
-    let refresh = use_state(|| false);
+    let refresh_list = use_state(|| false);
     let force_update = use_force_update();
     let selected_row: Rc<RefCell<Option<User>>> = use_mut_ref(|| None);
     let message = use_mut_ref(|| None);
@@ -40,9 +40,9 @@ pub fn user_list() -> Html {
         let loading = loading.clone();
         let data = data.clone();
         let force_update = force_update.clone();
-        let refresh = refresh.clone();
+        let refresh_list = refresh_list.clone();
         let selected_row = selected_row.clone();
-        use_effect_with(refresh, move |_| {
+        use_effect_with(refresh_list, move |_| {
             spawn_local(async move {
                 match user_controller_api::search(
                     &common::get_cli_config().unwrap(),
@@ -68,6 +68,7 @@ pub fn user_list() -> Html {
         })
     }
 
+
     let user_form_close = {
         let user_form_closed = user_form_closed.clone();
         let force_update = force_update.clone();
@@ -79,7 +80,7 @@ pub fn user_list() -> Html {
 
     let user_form_update = {
         let user_form_closed = user_form_closed.clone();
-        let refresh = refresh.clone();
+        let refresh = refresh_list.clone();
         let index = index.clone();
         Callback::from(move |_e| {
             *user_form_closed.borrow_mut() = true;
@@ -99,9 +100,26 @@ pub fn user_list() -> Html {
 
     let confirm_form_confirm = {
         let confirm_form_closed = confirm_form_closed.clone();
-        let refresh = refresh.clone();
+        let refresh = refresh_list.clone();
         let index = index.clone();
-        Callback::from(move |_e| {
+        let selected_row = selected_row.clone();
+        let message = message.clone();
+        Callback::from(move |_| {
+            let user_id = selected_row.borrow().clone().unwrap().id;
+            let message = message.clone();
+            spawn_local(async move {
+                match user_controller_api::delete(
+                    &common::get_cli_config().unwrap(),
+                    UserDeleteReq { ids: vec![user_id] },
+                )
+                .await
+                {
+                    Ok(_) => {}
+                    Err(err) => {
+                        *message.borrow_mut() = Some(message_list::error(&format!("{}", err)));
+                    }
+                }
+            });
             *confirm_form_closed.borrow_mut() = true;
             *index.borrow_mut() = 1;
             refresh.set(!*refresh);
@@ -113,7 +131,7 @@ pub fn user_list() -> Html {
     let key_word_change = {
         let key_word_ref = key_word_ref.clone();
         let key_word = key_word.clone();
-        let refresh = refresh.clone();
+        let refresh = refresh_list.clone();
         let index = index.clone();
         Callback::from(move |_| {
             let input = key_word_ref.cast::<web_sys::HtmlInputElement>();
@@ -158,7 +176,7 @@ pub fn user_list() -> Html {
     let page_change = {
         let index = index.clone();
         let size = size.clone();
-        let refresh = refresh.clone();
+        let refresh = refresh_list.clone();
         Callback::from(move |page: Page| {
             *index.borrow_mut() = page.index as i64;
             *size.borrow_mut() = page.size;
