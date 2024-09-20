@@ -215,7 +215,7 @@ impl Component for ForgetPwd {
                                             ref msg_response,
                                         )) = f.entity
                                         {
-                                            if Some(452000) == msg_response.err_code {
+                                            if Some(452100000) == msg_response.err_code {
                                                 return ForgetPwdMsg::HandleSendEmailCodeHint(
                                                     msg_response.msg.clone(),
                                                 );

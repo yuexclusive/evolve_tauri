@@ -1,12 +1,14 @@
 use crate::util::error::ErrorKind;
 use crate::util::error::ToError;
+use evolve_axum_cli::apis::configuration::{ApiKey, Configuration};
 use fancy_regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use user_cli::apis::configuration::{ApiKey, Configuration};
 use yew::virtual_dom::VNode;
 
 pub type BasicResult<T, E = ErrorKind> = Result<T, E>;
+
+const BASE_URL: &str = "http://localhost:3000";
 
 pub fn validate_email(email: &str) -> BasicResult<()> {
     if email.is_empty() {
@@ -56,29 +58,28 @@ pub struct CurrentUser {
     pub email: String,
     pub name: Option<String>,
     pub mobile: Option<String>,
-    pub laston: Option<String>,
-    pub created_at: String,
-    pub updated_at: Option<String>,
-    pub expire_at: String,
+    pub laston: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: Option<i64>,
 }
 
 pub fn get_token() -> BasicResult<String> {
-    let str = get_local_storage("token")
+    let str = get_local_storage(crate::util::TOKEN_KEY)
         .ok_or(ErrorKind::OtherError(String::from("get token failed")))?;
     Ok(str)
 }
 
 pub fn get_cli_config_without_token() -> BasicResult<Configuration> {
     let mut ret = Configuration::default();
-    ret.base_path = "http://localhost:8881".to_string();
+    ret.base_path = BASE_URL.to_string();
     Ok(ret)
 }
 
 pub fn get_cli_config() -> BasicResult<Configuration> {
     let mut ret = Configuration::default();
-    ret.base_path = "http://localhost:8881".to_string();
+    ret.base_path = BASE_URL.to_string();
     ret.api_key = Some(ApiKey {
-        prefix: Some("Bearer".to_string()),
+        prefix: None,
         key: get_token()?,
     });
     Ok(ret)
@@ -93,7 +94,7 @@ pub fn get_current_user() -> BasicResult<CurrentUser> {
 }
 
 pub fn delete_current_user() -> BasicResult<()> {
-    del_local_storage("token");
+    del_local_storage(crate::util::TOKEN_KEY);
     del_local_storage("current_user");
     del_local_storage("selected_navbar_name");
     del_local_storage("selected_navbar_parent_name");
@@ -124,14 +125,14 @@ pub fn redirect(path: &str) {
 }
 
 pub fn create_html(tag: &str, inner_html: &str) -> VNode {
-    let td = web_sys::window()
+    let element = web_sys::window()
         .unwrap()
         .document()
         .unwrap()
         .create_element(tag)
         .unwrap();
-    td.set_inner_html(inner_html);
-    let vnode = yew::virtual_dom::VNode::VRef(web_sys::Node::from(td));
+    element.set_inner_html(inner_html);
+    let vnode = yew::virtual_dom::VNode::VRef(web_sys::Node::from(element));
 
     vnode
 }

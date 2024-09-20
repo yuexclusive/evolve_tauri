@@ -14,11 +14,11 @@ gloo-net = "0"
 # gloo-utils = "*"
 # js-sys = "*"
 # log = "*"
-serde = {version = "1", features = ["derive"]}
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # wasm-bindgen = {version = "0.2"}
 futures = "0"
-getrandom = {version = "0", features = ["js"]}
+getrandom = { version = "0", features = ["js"] }
 gloo = "0"
 wasm-bindgen-futures = "0"
 # gloo-utils = "0.1"
@@ -27,11 +27,11 @@ log = "0"
 rand = "0"
 # regex = "1"
 wasm-logger = "0"
-yew = {version = "0.21.0", features = ["csr"]}
-yew-router = {version = "0.18.0"}
+yew = { git = "https://github.com/yewstack/yew.git", features = ["csr"] }
+yew-router = { git = "https://github.com/yewstack/yew.git" }
 lazy_static = "1"
-user_cli = {path = "../evolve_backend/openapi_cli/user_cli"}
-uuid = {version = "1", features = ["v4", "fast-rng", "macro-diagnostics"]}
+evolve_axum_cli = { path = "../evolve_axum/evolve_axum_cli" }
+uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics"] }
 fancy-regex = "0.11.0"
 
 [dependencies.web-sys]
@@ -44,4 +44,4 @@ features = [
   "Response",
   "Window",
 ]
-version = "0"
+version = "^0.3.70"

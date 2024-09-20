@@ -1,9 +1,13 @@
 use crate::util::common;
 use crate::util::common::CurrentUser;
 use serde_json;
-use user_cli::apis::user_controller_api::{LoginError, ValidateExistEmailError};
-use user_cli::apis::{user_controller_api, Error};
-use user_cli::models;
+// use user_cli::apis::user_controller_api::{LoginError, ValidateExistEmailError};
+// use user_cli::apis::{user_controller_api, Error};
+// use user_cli::models;
+use evolve_axum_cli::apis::auth_api::AuthorizeError;
+use evolve_axum_cli::apis::user_api::{self, ValidateExistEmailError};
+use evolve_axum_cli::apis::{auth_api, Error};
+use evolve_axum_cli::models;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
@@ -59,7 +63,7 @@ pub fn login() -> Html {
                 let email_valid = email_valid.clone();
                 let force_update = force_update.clone();
                 spawn_local(async move {
-                    match user_controller_api::validate_exist_email(
+                    match user_api::validate_exist_email(
                         &common::get_cli_config_without_token().unwrap(),
                         &email,
                     )
@@ -73,7 +77,7 @@ pub fn login() -> Html {
                                 Some(ValidateExistEmailError::Status400(e))
                                 | Some(ValidateExistEmailError::Status500(e)) => {
                                     *email_valid.borrow_mut() =
-                                        ValidStatus::InValid(format!("{}", e.msg));
+                                        ValidStatus::InValid(format!("{}", e.message));
                                 }
                                 _ => {
                                     *email_valid.borrow_mut() =
@@ -138,26 +142,27 @@ pub fn login() -> Html {
                     let force_update = force_update.clone();
                     let request_fail_msg = request_fail_msg.clone();
                     spawn_local(async move {
-                        match user_controller_api::validate_exist_email(
+                        match user_api::validate_exist_email(
                             &common::get_cli_config_without_token().unwrap(),
                             &email,
                         )
                         .await
                         {
                             Ok(_) => {
-                                let req = models::LoginReq {
-                                    email: email,
-                                    pwd: pwd,
+                                let req = models::AuthReq {
+                                    authorize_type: models::AuthorizeType::User,
+                                    id: email,
+                                    secret: pwd,
                                 };
-                                match user_controller_api::login(
+                                match auth_api::authorize(
                                     &common::get_cli_config_without_token().unwrap(),
                                     req,
                                 )
                                 .await
                                 {
                                     Ok(res) => {
-                                        common::set_local_storage("token", &res.data);
-                                        match user_controller_api::get_current_user(
+                                        common::set_local_storage(crate::util::TOKEN_KEY, &res.access_token);
+                                        match auth_api::user_info(
                                             &common::get_cli_config().unwrap(),
                                         )
                                         .await
@@ -168,12 +173,11 @@ pub fn login() -> Html {
                                                     id: a.id,
                                                     r#type: a.r#type.to_string(),
                                                     email: a.email,
-                                                    name: a.name,
-                                                    mobile: a.mobile,
-                                                    laston: a.laston,
+                                                    name: a.name.unwrap(),
+                                                    mobile: a.mobile.unwrap(),
+                                                    laston: a.laston.unwrap(),
                                                     created_at: a.created_at,
-                                                    updated_at: a.updated_at,
-                                                    expire_at: a.expire_at,
+                                                    updated_at: a.updated_at.unwrap(),
                                                 };
                                                 common::set_local_storage(
                                                     "current_user",
@@ -189,10 +193,11 @@ pub fn login() -> Html {
                                     }
                                     Err(err) => match err {
                                         Error::ResponseError(res_err) => match res_err.entity {
-                                            Some(LoginError::Status400(e))
-                                            | Some(LoginError::Status500(e)) => {
+                                            Some(AuthorizeError::Status400(e))
+                                            | Some(AuthorizeError::Status401(e))
+                                            | Some(AuthorizeError::Status500(e)) => {
                                                 *request_fail_msg.borrow_mut() =
-                                                    format!("{}", e.msg)
+                                                    format!("{}", e.message)
                                             }
                                             _ => {
                                                 *request_fail_msg.borrow_mut() =
@@ -208,7 +213,7 @@ pub fn login() -> Html {
                                     Some(ValidateExistEmailError::Status400(e))
                                     | Some(ValidateExistEmailError::Status500(e)) => {
                                         *email_valid.borrow_mut() =
-                                            ValidStatus::InValid(format!("{}", e.msg));
+                                            ValidStatus::InValid(format!("{}", e.message));
                                     }
                                     _ => {
                                         *email_valid.borrow_mut() =
